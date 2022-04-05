@@ -1,8 +1,9 @@
 ---
 - job:
-    name: "bayeux-mbp"
-    display-name: bayeux
-    description: bayeux
+    name: "Library/bayeux-mbp"
+    display-name: Bayeux
+    description: Jenkins pipeline for the Bayeux library
+    view: Beats
     project-type: multibranch
     script-path: .ci/Jenkinsfile
     scm:
