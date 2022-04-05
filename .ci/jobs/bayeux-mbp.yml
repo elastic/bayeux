@@ -2,7 +2,7 @@
 - job:
     name: "bayeux-mbp"
     display-name: bayeux
-    description: bayeux
+    description: Fork of zph/bayeux library
     project-type: multibranch
     script-path: .ci/Jenkinsfile
     scm:
