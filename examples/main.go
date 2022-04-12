@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	bay "github.com/elastic/bayeux"
 )
 
 func Example() {
-	out := make(chan bay.TriggerEvent)
+	ctx := context.Background()
+	out := make(chan bay.MaybeMsg)
 	b := bay.Bayeux{}
 	var ap bay.AuthenticationParameters
 	ap.ClientID = "3MVG9pRsdbjsbdjfm1I.fz3f7zBuH4xdKCJcM9B5XLgxXh2AFTmQmr8JMn1vsadjsadjjsadakd_C"
@@ -17,7 +19,7 @@ func Example() {
 	ap.TokenURL = "https://login.salesforce.com/services/oauth2/token"
 	creds, _ := bay.GetSalesforceCredentials(ap)
 	replay := "-1"
-	c := b.Channel(out, replay, *creds, "channel")
+	c := b.Channel(ctx, out, replay, *creds, "channel")
 	for {
 		select {
 		case e := <-c:

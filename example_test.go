@@ -1,11 +1,13 @@
 package bayeux
 
 import (
+	"context"
 	"fmt"
 )
 
 func Example() {
-	out := make(chan TriggerEvent)
+	ctx := context.Background()
+	out := make(chan MaybeMsg)
 	replay := "-1"
 	b := Bayeux{}
 	// Create a variable of type AuthenticationParameters and set the values
@@ -16,7 +18,7 @@ func Example() {
 	ap.Password = "foobar"
 	ap.TokenURL = "https://login.salesforce.com/services/oauth2/token"
 	creds, _ := GetSalesforceCredentials(ap)
-	c := b.Channel(out, replay, *creds, "channel")
+	c := b.Channel(ctx, out, replay, *creds, "channel")
 	for {
 		select {
 		case e := <-c:
