@@ -302,7 +302,10 @@ func (b *Bayeux) Channel(ctx context.Context, out chan MaybeMsg, r string, creds
 	if err != nil {
 		out <- MaybeMsg{Err: err}
 	}
-	b.subscribe(ctx, channel, r)
+	_, err = b.subscribe(ctx, channel, r)
+	if err != nil {
+		out <- MaybeMsg{Err: err}
+	}
 	c := b.connect(ctx, out)
 	return c
 }
