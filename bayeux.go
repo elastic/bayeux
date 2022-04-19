@@ -43,9 +43,19 @@ type TriggerEvent struct {
 
 // Status is the state of success and subscribed channels
 type Status struct {
-	connected bool
-	clientID  string
-	channels  []string
+	connected    bool
+	clientID     string
+	channels     []string
+	connectCount int
+}
+
+func (st *Status) connect() {
+	st.connectCount++
+}
+
+func (st *Status) disconnect(out chan MaybeMsg) {
+	close(out)
+	st.connectCount--
 }
 
 type BayeuxHandshake []struct {
@@ -95,13 +105,31 @@ type AuthenticationParameters struct {
 
 // Bayeux struct allow for centralized storage of creds, ids, and cookies
 type Bayeux struct {
-	creds Credentials
-	id    clientIDAndCookies
+	creds  Credentials
+	id     clientIDAndCookies
+	status Status
+}
+
+func (b *Bayeux) GetConnectedCount() int {
+	return status.connectCount
+}
+
+type Client struct {
+	BayOb Bayeux
+}
+
+func NewClient() Client {
+	client := Client{}
+	b := Bayeux{}
+	client = Client{
+		BayOb: b,
+	}
+	return client
 }
 
 var wg sync.WaitGroup
 var logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
-var status = Status{false, "", []string{}}
+var status = Status{false, "", []string{}, 0}
 
 // newHTTPRequest is to create requests with context
 func (b *Bayeux) newHTTPRequest(ctx context.Context, body string, route string) (*http.Request, error) {
@@ -224,6 +252,7 @@ func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) e
 	status.connected = sub.Successful
 	status.clientID = sub.ClientID
 	status.channels = append(status.channels, channel)
+	status.connect()
 	if os.Getenv("DEBUG") != "" {
 		logger.Printf("Established connection(s): %+v", status)
 	}
@@ -234,7 +263,7 @@ func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer close(out)
+		defer status.disconnect(out)
 		for {
 			select {
 			case <-ctx.Done():
@@ -266,7 +295,12 @@ func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
 						return
 					}
 					for _, e := range x {
-						out <- MaybeMsg{Msg: e}
+						select {
+						case <-ctx.Done():
+							return
+						default:
+							out <- MaybeMsg{Msg: e}
+						}
 					}
 				}
 			}
@@ -298,6 +332,7 @@ func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, 
 
 func (b *Bayeux) Channel(ctx context.Context, out chan MaybeMsg, r string, creds Credentials, channel string) chan MaybeMsg {
 	b.creds = creds
+	b.status = status
 	err := b.getClientID(ctx)
 	if err != nil {
 		out <- MaybeMsg{Err: err}
