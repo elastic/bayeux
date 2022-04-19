@@ -182,7 +182,7 @@ type Replay struct {
 	Value int
 }
 
-func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) (*Subscription, error) {
+func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) error {
 	handshake := fmt.Sprintf(`{
 								"channel": "/meta/subscribe",
 								"subscription": "%s",
@@ -193,7 +193,7 @@ func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) (
 								}`, channel, b.id.clientID, channel, replay)
 	resp, err := b.call(ctx, handshake, b.creds.bayeuxUrl())
 	if err != nil {
-		return nil, fmt.Errorf("cannot subscribe: %w", err)
+		return fmt.Errorf("cannot subscribe: %w", err)
 	}
 
 	defer resp.Body.Close()
@@ -211,14 +211,14 @@ func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) (
 	}
 
 	if resp.StatusCode > 299 {
-		return nil, fmt.Errorf("received non 2XX response: %w", err)
+		return fmt.Errorf("received non 2XX response: %w", err)
 	}
 	decoder := json.NewDecoder(resp.Body)
 	var h []Subscription
 	if err := decoder.Decode(&h); err == io.EOF {
-		return nil, err
+		return err
 	} else if err != nil {
-		return nil, err
+		return err
 	}
 	sub := &h[0]
 	status.connected = sub.Successful
@@ -227,7 +227,7 @@ func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) (
 	if os.Getenv("DEBUG") != "" {
 		logger.Printf("Established connection(s): %+v", status)
 	}
-	return sub, nil
+	return nil
 }
 
 func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
@@ -301,8 +301,15 @@ func (b *Bayeux) Channel(ctx context.Context, out chan MaybeMsg, r string, creds
 	err := b.getClientID(ctx)
 	if err != nil {
 		out <- MaybeMsg{Err: err}
+		close(out)
+		return out
 	}
-	b.subscribe(ctx, channel, r)
+	err = b.subscribe(ctx, channel, r)
+	if err != nil {
+		out <- MaybeMsg{Err: err}
+		close(out)
+		return out
+	}
 	c := b.connect(ctx, out)
 	return c
 }
