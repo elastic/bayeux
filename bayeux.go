@@ -53,8 +53,7 @@ func (st *Status) connect() {
 	st.connectCount++
 }
 
-func (st *Status) disconnect(out chan MaybeMsg) {
-	close(out)
+func (st *Status) disconnect() {
 	st.connectCount--
 }
 
@@ -262,8 +261,11 @@ func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) e
 func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
-		defer status.disconnect(out)
+		defer func() {
+			close(out)
+			status.disconnect()
+			wg.Done()
+		}()
 		for {
 			select {
 			case <-ctx.Done():
@@ -294,6 +296,7 @@ func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
 						out <- MaybeMsg{Err: err}
 						return
 					}
+					// close channel as soon as context is canceled to ensure it won't hold channel open for forever
 					for _, e := range x {
 						select {
 						case <-ctx.Done():
