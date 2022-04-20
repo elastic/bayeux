@@ -114,14 +114,14 @@ func (b *Bayeux) GetConnectedCount() int {
 }
 
 type Client struct {
-	BayOb Bayeux
+	Bay Bayeux // Bayeux for client
 }
 
 func NewClient() Client {
 	client := Client{}
 	b := Bayeux{}
 	client = Client{
-		BayOb: b,
+		Bay: b,
 	}
 	return client
 }
