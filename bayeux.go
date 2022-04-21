@@ -42,18 +42,18 @@ type TriggerEvent struct {
 }
 
 // Status is the state of success and subscribed channels
-type Status struct {
+type status struct {
 	connected    bool
 	clientID     string
 	channels     []string
 	connectCount int
 }
 
-func (st *Status) connect() {
+func (st *status) connect() {
 	st.connectCount++
 }
 
-func (st *Status) disconnect() {
+func (st *status) disconnect() {
 	st.connectCount--
 }
 
@@ -104,31 +104,13 @@ type AuthenticationParameters struct {
 
 // Bayeux struct allow for centralized storage of creds, ids, and cookies
 type Bayeux struct {
-	creds  Credentials
-	id     clientIDAndCookies
-	status Status
-}
-
-func (b *Bayeux) GetConnectedCount() int {
-	return status.connectCount
-}
-
-type Client struct {
-	Bay Bayeux // Bayeux for client
-}
-
-func NewClient() Client {
-	client := Client{}
-	b := Bayeux{}
-	client = Client{
-		Bay: b,
-	}
-	return client
+	creds Credentials
+	id    clientIDAndCookies
 }
 
 var wg sync.WaitGroup
 var logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
-var status = Status{false, "", []string{}, 0}
+var st = status{false, "", []string{}, 0}
 
 // newHTTPRequest is to create requests with context
 func (b *Bayeux) newHTTPRequest(ctx context.Context, body string, route string) (*http.Request, error) {
@@ -248,12 +230,12 @@ func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) e
 		return err
 	}
 	sub := &h[0]
-	status.connected = sub.Successful
-	status.clientID = sub.ClientID
-	status.channels = append(status.channels, channel)
-	status.connect()
+	st.connected = sub.Successful
+	st.clientID = sub.ClientID
+	st.channels = append(st.channels, channel)
+	st.connect()
 	if os.Getenv("DEBUG") != "" {
-		logger.Printf("Established connection(s): %+v", status)
+		logger.Printf("Established connection(s): %+v", st)
 	}
 	return nil
 }
@@ -263,7 +245,7 @@ func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
 	go func() {
 		defer func() {
 			close(out)
-			status.disconnect()
+			st.disconnect()
 			wg.Done()
 		}()
 		for {
@@ -312,6 +294,11 @@ func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
 	return out
 }
 
+// GetConnectedCount returns count of subcriptions
+func GetConnectedCount() int {
+	return st.connectCount
+}
+
 func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, err error) {
 	params := url.Values{"grant_type": {"password"},
 		"client_id":     {ap.ClientID},
@@ -335,7 +322,6 @@ func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, 
 
 func (b *Bayeux) Channel(ctx context.Context, out chan MaybeMsg, r string, creds Credentials, channel string) chan MaybeMsg {
 	b.creds = creds
-	b.status = status
 	err := b.getClientID(ctx)
 	if err != nil {
 		out <- MaybeMsg{Err: err}
