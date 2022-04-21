@@ -241,9 +241,11 @@ func (b *Bayeux) subscribe(ctx context.Context, channel string, replay string) e
 }
 
 func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
+	var waitMsgs sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer func() {
+			waitMsgs.Wait()
 			close(out)
 			st.disconnect()
 			wg.Done()
@@ -278,14 +280,12 @@ func (b *Bayeux) connect(ctx context.Context, out chan MaybeMsg) chan MaybeMsg {
 						out <- MaybeMsg{Err: err}
 						return
 					}
-					// close channel as soon as context is canceled to ensure it won't hold channel open for forever
-					for _, e := range x {
-						select {
-						case <-ctx.Done():
-							return
-						default:
+					for i := range x {
+						waitMsgs.Add(1)
+						go func(e TriggerEvent) {
+							defer waitMsgs.Done()
 							out <- MaybeMsg{Msg: e}
-						}
+						}(x[i])
 					}
 				}
 			}
