@@ -3,6 +3,7 @@ package bayeux
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/golang-jwt/jwt"
 )
 
 type MaybeMsg struct {
@@ -100,6 +103,9 @@ type AuthenticationParameters struct {
 	Username     string // Salesforce user email (e.g. salesforce.user@email.com)
 	Password     string // Salesforce password
 	TokenURL     string // Salesforce token endpoint (e.g. https://login.salesforce.com/services/oauth2/token)
+	Path         string // Salesforce private key path
+	IsJwt        bool   // Salesforce auth method identifier
+	Audience     string // Salesforce authorization server’s URL for the audience value (e.g. https://login.salesforce.com or https://test.salesforce.com or https://site.force.com/customers)
 }
 
 // Bayeux struct allow for centralized storage of creds, ids, and cookies
@@ -300,11 +306,22 @@ func GetConnectedCount() int {
 }
 
 func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, err error) {
-	params := url.Values{"grant_type": {"password"},
-		"client_id":     {ap.ClientID},
-		"client_secret": {ap.ClientSecret},
-		"username":      {ap.Username},
-		"password":      {ap.Password}}
+
+	var params url.Values
+
+	if ap.IsJwt {
+		params, err = JwtGenerator(ap)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		params = url.Values{"grant_type": {"password"},
+			"client_id":     {ap.ClientID},
+			"client_secret": {ap.ClientSecret},
+			"username":      {ap.Username},
+			"password":      {ap.Password}}
+	}
+
 	res, err := http.PostForm(ap.TokenURL, params)
 	if err != nil {
 		return nil, err
@@ -318,6 +335,53 @@ func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, 
 		return nil, fmt.Errorf("unable to fetch access token: %w", err)
 	}
 	return creds, nil
+}
+
+func JwtGenerator(ap AuthenticationParameters) (url.Values, error) {
+	// Define your JWT claims (payload)
+	claims := jwt.MapClaims{
+		"iss": ap.ClientID,                            // Issuer
+		"sub": ap.Username,                            // Subject
+		"aud": ap.Audience,                            // Audience
+		"exp": time.Now().Add(1 * time.Minute).Unix(), // Expiration time (1 hour)
+	}
+
+	// Load your private key (RSA key) used for signing
+	keyFile := ap.Path
+	privateKey, err := loadPrivateKey(keyFile)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new JWT token
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+
+	tokenString, err := token.SignedString(privateKey)
+
+	if err != nil {
+		return nil, err
+	}
+
+	payload := url.Values{
+		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+		"assertion":  {tokenString},
+	}
+	return payload, nil
+}
+
+func loadPrivateKey(keyFile string) (*rsa.PrivateKey, error) {
+	keyBytes, err := os.ReadFile(keyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(keyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return privateKey, nil
 }
 
 func (b *Bayeux) Channel(ctx context.Context, out chan MaybeMsg, r string, creds Credentials, channel string) chan MaybeMsg {
