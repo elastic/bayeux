@@ -340,10 +340,10 @@ func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, 
 func JwtGenerator(ap AuthenticationParameters) (url.Values, error) {
 	// Define your JWT claims (payload)
 	claims := jwt.MapClaims{
-		"iss": ap.ClientID,                            // Issuer
-		"sub": ap.Username,                            // Subject
-		"aud": ap.Audience,                            // Audience
-		"exp": time.Now().Add(1 * time.Minute).Unix(), // Expiration time (1 hour)
+		"iss": ap.ClientID,                          // Issuer
+		"sub": ap.Username,                          // Subject
+		"aud": ap.Audience,                          // Audience
+		"exp": time.Now().Add(1 * time.Hour).Unix(), // Expiration time (1 hour)
 	}
 
 	// Load your private key (RSA key) used for signing
