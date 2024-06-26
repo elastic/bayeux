@@ -348,7 +348,6 @@ func JwtGenerator(ap AuthenticationParameters) (url.Values, error) {
 	// Load your private key (RSA key) used for signing
 	keyFile := ap.Path
 	privateKey, err := loadPrivateKey(keyFile)
-
 	if err != nil {
 		return nil, err
 	}
