@@ -353,9 +353,7 @@ func JwtGenerator(ap AuthenticationParameters) (url.Values, error) {
 	}
 
 	// Create a new JWT token
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-
-	tokenString, err := token.SignedString(privateKey)
+	tokenString, err := jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(privateKey)
 	if err != nil {
 		return nil, err
 	}
