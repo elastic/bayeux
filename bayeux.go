@@ -306,7 +306,6 @@ func GetConnectedCount() int {
 }
 
 func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, err error) {
-
 	var params url.Values
 
 	if ap.IsJwt {
