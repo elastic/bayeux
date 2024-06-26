@@ -360,11 +360,10 @@ func JwtGenerator(ap AuthenticationParameters) (url.Values, error) {
 		return nil, err
 	}
 
-	payload := url.Values{
+	return url.Values{
 		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
 		"assertion":  {tokenString},
-	}
-	return payload, nil
+	}, nil
 }
 
 func loadPrivateKey(keyFile string) (*rsa.PrivateKey, error) {
