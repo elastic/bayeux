@@ -12,7 +12,7 @@ func Example() {
 	out := make(chan bay.MaybeMsg)
 	b := bay.Bayeux{}
 	var ap bay.AuthenticationParameters
-        // make it false to use user-password flow
+	// make it false to use user-password flow
 	ap.IsJwt = true
 	ap.ClientID = "3MVG9pRsdbjsbdjfm1I.fz3f7zBuH4xdKCJcM9B5XLgxXh2AFTmQmr8JMn1vsadjsadjjsadakd_C"
 	ap.ClientSecret = "E9FE118633BC7SGDADUHUE81F19C1D4529D09CB7231754AD2F2CA668400619"
