@@ -17,7 +17,13 @@ func Example() {
 	ap.Username = "salesforce.user@email.com"
 	ap.Password = "foobar"
 	ap.TokenURL = "https://login.salesforce.com/services/oauth2/token"
-	creds, _ := GetSalesforceCredentials(ap)
+
+	//Create a variable of type Authentication 
+	auth:=Authentication{
+		AuthParameters: &ap,
+	}
+
+	creds, _ := GetSalesforceCredentials(auth)
 	c := b.Channel(ctx, out, replay, *creds, "channel")
 	for {
 		select {

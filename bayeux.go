@@ -114,6 +114,10 @@ type Bayeux struct {
 	id    clientIDAndCookies
 }
 
+type Authentication struct {
+	URLValues      *url.Values
+	AuthParameters *AuthenticationParameters
+}
 var wg sync.WaitGroup
 var logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
 var st = status{false, "", []string{}, 0}
@@ -305,29 +309,37 @@ func GetConnectedCount() int {
 	return st.connectCount
 }
 
-func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, err error) {
-	var params url.Values
+func GetSalesforceCredentials(auth Authentication) (creds *Credentials, err error) {
+	var params* Authentication
 
-	if ap.IsJwt {
-		params, err = JwtGenerator(ap)
+	if auth.AuthParameters == nil {
+		return nil, fmt.Errorf("auth parameters are empty")
+	}
+	if auth.AuthParameters.IsJwt {
+		params, err = GetJWTAuthentication(*auth.AuthParameters)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		params = url.Values{"grant_type": {"password"},
-			"client_id":     {ap.ClientID},
-			"client_secret": {ap.ClientSecret},
-			"username":      {ap.Username},
-			"password":      {ap.Password}}
-	}
 
-	res, err := http.PostForm(ap.TokenURL, params)
-	if err != nil {
-		return nil, err
+		if auth.AuthParameters.ClientID == "" || auth.AuthParameters.ClientSecret == "" || auth.AuthParameters.Username == "" || auth.AuthParameters.Password == "" {
+			return nil, fmt.Errorf("missing required authentication parameters")
+		}
+		params,_ = GetClientCredentialAuthentication(auth.AuthParameters.ClientID, auth.AuthParameters.ClientSecret, auth.AuthParameters.Username, auth.AuthParameters.Password, auth.AuthParameters.TokenURL)
 	}
+	if auth.AuthParameters.TokenURL == "" {
+			return nil, fmt.Errorf("missing required authentication parameter: token_url")
+		}
+
+	res, err := http.PostForm(auth.AuthParameters.TokenURL, *params.URLValues)
+	if err != nil {
+		return nil, fmt.Errorf("error posting form: %w", err)
+	}
+	defer res.Body.Close()
+
 	decoder := json.NewDecoder(res.Body)
 	if err := decoder.Decode(&creds); err == io.EOF {
-		return nil, err
+		return nil, fmt.Errorf("error decoding response: %w", err)
 	} else if err != nil {
 		return nil, err
 	} else if creds.AccessToken == "" {
@@ -336,7 +348,8 @@ func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, 
 	return creds, nil
 }
 
-func JwtGenerator(ap AuthenticationParameters) (url.Values, error) {
+// GetJWTAuthentication prepares the authentication parameters for JWT-based authentication
+func GetJWTAuthentication(ap AuthenticationParameters) (*Authentication, error) {
 	// Define your JWT claims (payload)
 	claims := jwt.MapClaims{
 		"iss": ap.ClientID,                          // Issuer
@@ -348,21 +361,52 @@ func JwtGenerator(ap AuthenticationParameters) (url.Values, error) {
 	// Load your private key (RSA key) used for signing
 	privateKey, err := loadPrivateKey(ap.Path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error loading private key: %w", err)
 	}
 
 	// Create a new JWT token
 	tokenString, err := jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(privateKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error signing JWT token: %w", err)
 	}
 
-	return url.Values{
+	return &Authentication{
+		URLValues: &url.Values{
 		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
 		"assertion":  {tokenString},
+	},
+	AuthParameters: &AuthenticationParameters{
+		ClientSecret: ap.ClientSecret,
+		Username:     ap.Username,
+		Audience:     ap.Audience,
+		Path:         ap.Path,
+	},
 	}, nil
 }
 
+// GetClientCredentialAuthentication prepares the authentication parameters for client credential-based authentication
+func GetClientCredentialAuthentication(clientId, clientSecret, username, password, tokenUrl string) (*Authentication, error) {
+	if clientId !=""  && clientSecret !=""  && username !=""  && password !=""  && tokenUrl !=""  {
+		return nil, errors.New("all authentication parameters must be set")
+	}
+
+	return &Authentication{
+		URLValues: &url.Values{
+			"grant_type":   {"password"},
+			"client_id":    {clientId},
+			"client_secret": {clientSecret},
+			"username":     {username},
+			"password":     {password},
+		},
+		AuthParameters: &AuthenticationParameters{
+			ClientID:     clientId,
+			ClientSecret: clientSecret,
+			Username:     username,
+			Password:     password,
+			TokenURL:     tokenUrl,
+		},
+	}, nil
+}
 func loadPrivateKey(keyFile string) (*rsa.PrivateKey, error) {
 	keyBytes, err := os.ReadFile(keyFile)
 	if err != nil {

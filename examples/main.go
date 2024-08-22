@@ -21,7 +21,10 @@ func Example() {
 	ap.TokenURL = "https://login.salesforce.com/services/oauth2/token"
 	ap.Path = "/path/to/private.key"
 	ap.Audience = "https://login.salesforce.com"
-	creds, _ := bay.GetSalesforceCredentials(ap)
+	auth:=bay.Authentication{
+		AuthParameters: &ap,
+	}
+	creds, _ := bay.GetSalesforceCredentials(auth)
 	replay := "-1"
 	c := b.Channel(ctx, out, replay, *creds, "channel")
 	for {
