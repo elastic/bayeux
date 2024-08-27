@@ -18,8 +18,8 @@ func Example() {
 	ap.Password = "foobar"
 	ap.TokenURL = "https://login.salesforce.com/services/oauth2/token"
 
-	//Create a variable of type Authentication 
-	auth:=Authentication{
+	//Create a variable of type Authentication
+	auth := Authentication{
 		AuthParameters: &ap,
 	}
 

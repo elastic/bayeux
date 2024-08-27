@@ -21,7 +21,7 @@ func Example() {
 	ap.TokenURL = "https://login.salesforce.com/services/oauth2/token"
 	ap.Path = "/path/to/private.key"
 	ap.Audience = "https://login.salesforce.com"
-	auth:=bay.Authentication{
+	auth := bay.Authentication{
 		AuthParameters: &ap,
 	}
 	creds, _ := bay.GetSalesforceCredentials(auth)

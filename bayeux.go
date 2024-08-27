@@ -118,6 +118,7 @@ type Authentication struct {
 	URLValues      *url.Values
 	AuthParameters *AuthenticationParameters
 }
+
 var wg sync.WaitGroup
 var logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
 var st = status{false, "", []string{}, 0}
@@ -310,7 +311,7 @@ func GetConnectedCount() int {
 }
 
 func GetSalesforceCredentials(auth Authentication) (creds *Credentials, err error) {
-	var params* Authentication
+	var params *Authentication
 
 	if auth.AuthParameters == nil {
 		return nil, fmt.Errorf("auth parameters are empty")
@@ -325,11 +326,11 @@ func GetSalesforceCredentials(auth Authentication) (creds *Credentials, err erro
 		if auth.AuthParameters.ClientID == "" || auth.AuthParameters.ClientSecret == "" || auth.AuthParameters.Username == "" || auth.AuthParameters.Password == "" {
 			return nil, fmt.Errorf("missing required authentication parameters")
 		}
-		params,_ = GetClientCredentialAuthentication(auth.AuthParameters.ClientID, auth.AuthParameters.ClientSecret, auth.AuthParameters.Username, auth.AuthParameters.Password, auth.AuthParameters.TokenURL)
+		params, _ = GetClientCredentialAuthentication(auth.AuthParameters.ClientID, auth.AuthParameters.ClientSecret, auth.AuthParameters.Username, auth.AuthParameters.Password, auth.AuthParameters.TokenURL)
 	}
 	if auth.AuthParameters.TokenURL == "" {
-			return nil, fmt.Errorf("missing required authentication parameter: token_url")
-		}
+		return nil, fmt.Errorf("missing required authentication parameter: token_url")
+	}
 
 	res, err := http.PostForm(auth.AuthParameters.TokenURL, *params.URLValues)
 	if err != nil {
@@ -372,31 +373,31 @@ func GetJWTAuthentication(ap AuthenticationParameters) (*Authentication, error) 
 
 	return &Authentication{
 		URLValues: &url.Values{
-		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
-		"assertion":  {tokenString},
-	},
-	AuthParameters: &AuthenticationParameters{
-		ClientSecret: ap.ClientSecret,
-		Username:     ap.Username,
-		Audience:     ap.Audience,
-		Path:         ap.Path,
-	},
+			"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+			"assertion":  {tokenString},
+		},
+		AuthParameters: &AuthenticationParameters{
+			ClientSecret: ap.ClientSecret,
+			Username:     ap.Username,
+			Audience:     ap.Audience,
+			Path:         ap.Path,
+		},
 	}, nil
 }
 
 // GetClientCredentialAuthentication prepares the authentication parameters for client credential-based authentication
 func GetClientCredentialAuthentication(clientId, clientSecret, username, password, tokenUrl string) (*Authentication, error) {
-	if clientId !=""  && clientSecret !=""  && username !=""  && password !=""  && tokenUrl !=""  {
+	if clientId != "" && clientSecret != "" && username != "" && password != "" && tokenUrl != "" {
 		return nil, errors.New("all authentication parameters must be set")
 	}
 
 	return &Authentication{
 		URLValues: &url.Values{
-			"grant_type":   {"password"},
-			"client_id":    {clientId},
+			"grant_type":    {"password"},
+			"client_id":     {clientId},
 			"client_secret": {clientSecret},
-			"username":     {username},
-			"password":     {password},
+			"username":      {username},
+			"password":      {password},
 		},
 		AuthParameters: &AuthenticationParameters{
 			ClientID:     clientId,
