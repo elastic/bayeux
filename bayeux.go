@@ -3,6 +3,7 @@ package bayeux
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/golang-jwt/jwt"
 )
 
 type MaybeMsg struct {
@@ -100,12 +103,20 @@ type AuthenticationParameters struct {
 	Username     string // Salesforce user email (e.g. salesforce.user@email.com)
 	Password     string // Salesforce password
 	TokenURL     string // Salesforce token endpoint (e.g. https://login.salesforce.com/services/oauth2/token)
+	Path         string // Salesforce private key path
+	IsJwt        bool   // Salesforce auth method identifier
+	Audience     string // Salesforce authorization server’s URL for the audience value (e.g. https://login.salesforce.com or https://test.salesforce.com or https://site.force.com/customers)
 }
 
 // Bayeux struct allow for centralized storage of creds, ids, and cookies
 type Bayeux struct {
 	creds Credentials
 	id    clientIDAndCookies
+}
+
+type Authentication struct {
+	URLValues      *url.Values
+	AuthParameters *AuthenticationParameters
 }
 
 var wg sync.WaitGroup
@@ -299,25 +310,116 @@ func GetConnectedCount() int {
 	return st.connectCount
 }
 
-func GetSalesforceCredentials(ap AuthenticationParameters) (creds *Credentials, err error) {
-	params := url.Values{"grant_type": {"password"},
-		"client_id":     {ap.ClientID},
-		"client_secret": {ap.ClientSecret},
-		"username":      {ap.Username},
-		"password":      {ap.Password}}
-	res, err := http.PostForm(ap.TokenURL, params)
-	if err != nil {
-		return nil, err
+func GetSalesforceCredentials(auth Authentication) (creds *Credentials, err error) {
+	var params *Authentication
+
+	if auth.AuthParameters == nil {
+		return nil, fmt.Errorf("auth parameters are empty")
 	}
+	if auth.AuthParameters.IsJwt {
+		params, err = GetJWTAuthentication(*auth.AuthParameters)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+
+		if auth.AuthParameters.ClientID == "" || auth.AuthParameters.ClientSecret == "" || auth.AuthParameters.Username == "" || auth.AuthParameters.Password == "" {
+			return nil, fmt.Errorf("missing required authentication parameters")
+		}
+		params, _ = GetClientCredentialAuthentication(auth.AuthParameters.ClientID, auth.AuthParameters.ClientSecret, auth.AuthParameters.Username, auth.AuthParameters.Password, auth.AuthParameters.TokenURL)
+	}
+	if auth.AuthParameters.TokenURL == "" {
+		return nil, fmt.Errorf("missing required authentication parameter: token_url")
+	}
+
+	res, err := http.PostForm(auth.AuthParameters.TokenURL, *params.URLValues)
+	if err != nil {
+		return nil, fmt.Errorf("error posting form: %w", err)
+	}
+	defer res.Body.Close()
+
 	decoder := json.NewDecoder(res.Body)
 	if err := decoder.Decode(&creds); err == io.EOF {
-		return nil, err
+		return nil, fmt.Errorf("error decoding response: %w", err)
 	} else if err != nil {
 		return nil, err
 	} else if creds.AccessToken == "" {
 		return nil, fmt.Errorf("unable to fetch access token: %w", err)
 	}
 	return creds, nil
+}
+
+// GetJWTAuthentication prepares the authentication parameters for JWT-based authentication
+func GetJWTAuthentication(ap AuthenticationParameters) (*Authentication, error) {
+	// Define your JWT claims (payload)
+	claims := jwt.MapClaims{
+		"iss": ap.ClientID,                          // Issuer
+		"sub": ap.Username,                          // Subject
+		"aud": ap.Audience,                          // Audience
+		"exp": time.Now().Add(1 * time.Hour).Unix(), // Expiration time (1 hour)
+	}
+
+	// Load your private key (RSA key) used for signing
+	privateKey, err := loadPrivateKey(ap.Path)
+	if err != nil {
+		return nil, fmt.Errorf("Error loading private key: %w", err)
+	}
+
+	// Create a new JWT token
+	tokenString, err := jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("Error signing JWT token: %w", err)
+	}
+
+	return &Authentication{
+		URLValues: &url.Values{
+			"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+			"assertion":  {tokenString},
+		},
+		AuthParameters: &AuthenticationParameters{
+			ClientSecret: ap.ClientSecret,
+			Username:     ap.Username,
+			Audience:     ap.Audience,
+			Path:         ap.Path,
+		},
+	}, nil
+}
+
+// GetClientCredentialAuthentication prepares the authentication parameters for client credential-based authentication
+func GetClientCredentialAuthentication(clientId, clientSecret, username, password, tokenUrl string) (*Authentication, error) {
+	if clientId != "" && clientSecret != "" && username != "" && password != "" && tokenUrl != "" {
+		return nil, errors.New("all authentication parameters must be set")
+	}
+
+	return &Authentication{
+		URLValues: &url.Values{
+			"grant_type":    {"password"},
+			"client_id":     {clientId},
+			"client_secret": {clientSecret},
+			"username":      {username},
+			"password":      {password},
+		},
+		AuthParameters: &AuthenticationParameters{
+			ClientID:     clientId,
+			ClientSecret: clientSecret,
+			Username:     username,
+			Password:     password,
+			TokenURL:     tokenUrl,
+		},
+	}, nil
+}
+func loadPrivateKey(keyFile string) (*rsa.PrivateKey, error) {
+	keyBytes, err := os.ReadFile(keyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(keyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return privateKey, nil
 }
 
 func (b *Bayeux) Channel(ctx context.Context, out chan MaybeMsg, r string, creds Credentials, channel string) chan MaybeMsg {
